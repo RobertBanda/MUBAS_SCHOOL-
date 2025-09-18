@@ -12,6 +12,8 @@ include 'db.php';
 <meta charset="UTF-8">
 <title>LWB Management System</title>
 <link rel="stylesheet" href="style.css">
+<!-- External JavaScript (with defer attribute) -->
+<script src="script.js" defer></script>
 <!-- Material Icons CDN -->
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <style>
@@ -345,6 +347,8 @@ include 'db.php';
     border-radius: 0 0 16px 16px;
     box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
   }
+
+  
 </style>
 </head>
 <body>
@@ -366,8 +370,9 @@ include 'db.php';
   <button data-tab="balances" onclick="showTab('balances')">Customer Balances</button>
   <button data-tab="complaints" onclick="showTab('complaints')">Complaints</button>
   <button data-tab="staff" onclick="showTab('staff')">Staff</button>
-<button data-tab="calllogs" onclick="showTab('calllogs')">Call Logs</button>
-
+  <button data-tab="calllogs" onclick="showTab('calllogs')">Call Logs</button>
+  <button data-tab="store" onclick="showTab('store')">Store</button>
+  <button data-tab="store_transactions" onclick="showTab('store_transactions')">Store Transactions</button>
 
 </nav>
 
@@ -1948,17 +1953,364 @@ document.getElementById('units_consumed').addEventListener('input', function() {
 </div>
 
 
+<!-- Store Tab - Add this with your other tabs -->
+<div id="store" class="tab">
+    <h2>Store Management</h2>
+    <?php
+    // === CRUD LOGIC for Store ===
+    $store_msg = '';
+    
+    // Delete item
+    if (isset($_GET['delete_store'])) {
+        $id = intval($_GET['delete_store']);
+        $conn->query("DELETE FROM Store WHERE Store_ID=$id");
+        $store_msg = "<div class='msg success'>Store item deleted successfully.</div>";
+    }
+
+    // Update item
+    if (isset($_POST['update_store_id'])) {
+        $id = intval($_POST['update_store_id']);
+        $complaint_id = !empty($_POST['edit_complaint_id']) ? intval($_POST['edit_complaint_id']) : 'NULL';
+        $customer_id = !empty($_POST['edit_customer_id']) ? intval($_POST['edit_customer_id']) : 'NULL';
+        $item_type = $conn->real_escape_string($_POST['edit_item_type']);
+        $staff_id = !empty($_POST['edit_staff_id']) ? intval($_POST['edit_staff_id']) : 'NULL';
+        
+        $sql = "UPDATE Store SET 
+                Complaint_ID=$complaint_id, 
+                Customer_ID=$customer_id, 
+                Item_Type='$item_type', 
+                Staff_ID=$staff_id 
+                WHERE Store_ID=$id";
+        
+        if ($conn->query($sql)) {
+            $store_msg = "<div class='msg success'>Store item updated successfully.</div>";
+        } else {
+            $store_msg = "<div class='msg error'>Error updating: " . $conn->error . "</div>";
+        }
+    }
+
+    // Insert new item
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['item_type']) && !isset($_POST['update_store_id'])) {
+        $complaint_id = !empty($_POST['complaint_id']) ? intval($_POST['complaint_id']) : 'NULL';
+        $customer_id = !empty($_POST['customer_id']) ? intval($_POST['customer_id']) : 'NULL';
+        $item_type = $conn->real_escape_string($_POST['item_type']);
+        $staff_id = !empty($_POST['staff_id']) ? intval($_POST['staff_id']) : 'NULL';
+        
+        $sql = "INSERT INTO Store (Complaint_ID, Customer_ID, Item_Type, Staff_ID) 
+                VALUES ($complaint_id, $customer_id, '$item_type', $staff_id)";
+        
+        if ($conn->query($sql)) {
+            $store_msg = "<div class='msg success'>Store item added successfully.</div>";
+        } else {
+            $store_msg = "<div class='msg error'>Error: " . $conn->error . "</div>";
+        }
+    }
+
+    // Fetch data for dropdowns
+    $complaints = $conn->query("SELECT Complaint_ID, Type FROM complaints ORDER BY Complaint_ID DESC");
+    $customers = $conn->query("SELECT Customer_ID, Name FROM customers ORDER BY Name");
+    $staffs = $conn->query("SELECT Staff_ID, Name FROM staff ORDER BY Name");
+
+    // For edit
+    $edit_store_id = isset($_GET['edit_store']) ? intval($_GET['edit_store']) : 0;
+    $edit_store = null;
+    if ($edit_store_id) {
+        $res = $conn->query("SELECT * FROM Store WHERE Store_ID=$edit_store_id");
+        $edit_store = $res->fetch_assoc();
+    }
+    
+    if ($store_msg) echo $store_msg;
+    ?>
+
+    <!-- Add/Edit Form -->
+    <form method="post" style="margin-bottom:2rem; background:#f9fbff; padding:1.5rem; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <?php if($edit_store): ?>
+            <input type="hidden" name="update_store_id" value="<?php echo $edit_store['Store_ID']; ?>">
+        <?php endif; ?>
+
+        <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+            <div style="flex:1; min-width:200px;">
+                <label for="complaint_id">Complaint (Optional)</label><br>
+                <select id="complaint_id" name="complaint_id" style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+                    <option value="">--Select Complaint--</option>
+                    <?php 
+                    $complaints->data_seek(0);
+                    while($comp = $complaints->fetch_assoc()): ?>
+                        <option value="<?php echo $comp['Complaint_ID']; ?>" 
+                            <?php if($edit_store && $edit_store['Complaint_ID']==$comp['Complaint_ID']) echo 'selected'; ?>>
+                            #<?php echo $comp['Complaint_ID']; ?> - <?php echo $comp['Type']; ?>
+                        </option>
+                    <?php endwhile; ?>
+                </select>
+            </div>
+
+            <div style="flex:1; min-width:200px;">
+                <label for="customer_id">Customer (Optional)</label><br>
+                <select id="customer_id" name="customer_id" style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+                    <option value="">--Select Customer--</option>
+                    <?php 
+                    $customers->data_seek(0);
+                    while($cust = $customers->fetch_assoc()): ?>
+                        <option value="<?php echo $cust['Customer_ID']; ?>" 
+                            <?php if($edit_store && $edit_store['Customer_ID']==$cust['Customer_ID']) echo 'selected'; ?>>
+                            <?php echo $cust['Name']; ?> (ID: <?php echo $cust['Customer_ID']; ?>)
+                        </option>
+                    <?php endwhile; ?>
+                </select>
+            </div>
+
+            <div style="flex:1; min-width:200px;">
+                <label for="item_type">Item Type *</label><br>
+                <select id="item_type" name="item_type" required style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+                    <option value="">--Select Item Type--</option>
+                    <option value="Pipes - PVC" <?php if($edit_store && $edit_store['Item_Type']=='Pipes - PVC') echo 'selected'; ?>>Pipes - PVC</option>
+                    <option value="Pipes - Copper" <?php if($edit_store && $edit_store['Item_Type']=='Pipes - Copper') echo 'selected'; ?>>Pipes - Copper</option>
+                    <option value="Pipes - PPR" <?php if($edit_store && $edit_store['Item_Type']=='Pipes - PPR') echo 'selected'; ?>>Pipes - PPR</option>
+                    <option value="Valves - Gate" <?php if($edit_store && $edit_store['Item_Type']=='Valves - Gate') echo 'selected'; ?>>Valves - Gate</option>
+                    <option value="Valves - Stop Cork" <?php if($edit_store && $edit_store['Item_Type']=='Valves - Stop Cork') echo 'selected'; ?>>Valves - Stop Cork</option>
+                    <option value="Taps" <?php if($edit_store && $edit_store['Item_Type']=='Taps') echo 'selected'; ?>>Taps</option>
+                    <option value="Water Meters" <?php if($edit_store && $edit_store['Item_Type']=='Water Meters') echo 'selected'; ?>>Water Meters</option>
+                </select>
+            </div>
+
+            <div style="flex:1; min-width:200px;">
+                <label for="staff_id">Staff (Optional)</label><br>
+                <select id="staff_id" name="staff_id" style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+                    <option value="">--Select Staff--</option>
+                    <?php 
+                    $staffs->data_seek(0);
+                    while($staff = $staffs->fetch_assoc()): ?>
+                        <option value="<?php echo $staff['Staff_ID']; ?>" 
+                            <?php if($edit_store && $edit_store['Staff_ID']==$staff['Staff_ID']) echo 'selected'; ?>>
+                            <?php echo $staff['Name']; ?> (ID: <?php echo $staff['Staff_ID']; ?>)
+                        </option>
+                    <?php endwhile; ?>
+                </select>
+            </div>
+
+            <div style="min-width:100px;">
+                <button type="submit" style="background:#1976d2;color:#fff;padding:0.7rem 1.5rem;border:none;border-radius:5px;font-size:1rem;cursor:pointer;">
+                    <?php echo $edit_store ? 'Update' : 'Add'; ?> Item
+                </button>
+                <?php if($edit_store): ?>
+                    <a href="?tab=store" style="margin-left:10px;color:#888;">Cancel</a>
+                <?php endif; ?>
+            </div>
+        </div>
+    </form>
+
+    <!-- Display Table -->
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Complaint</th>
+            <th>Customer</th>
+            <th>Item Type</th>
+            <th>Staff</th>
+            <th>Created At</th>
+            <th>Action</th>
+        </tr>
+        <?php
+        $res = $conn->query("
+            SELECT s.*, 
+                   c.Type as Complaint_Type, 
+                   cu.Name as Customer_Name, 
+                   st.Name as Staff_Name 
+            FROM Store s
+            LEFT JOIN complaints c ON s.Complaint_ID = c.Complaint_ID
+            LEFT JOIN customers cu ON s.Customer_ID = cu.Customer_ID
+            LEFT JOIN staff st ON s.Staff_ID = st.Staff_ID
+            ORDER BY s.Store_ID DESC
+        ");
+        
+        if ($res->num_rows > 0) {
+            while($row = $res->fetch_assoc()){
+                echo "<tr>
+                    <td>{$row['Store_ID']}</td>
+                    <td>" . ($row['Complaint_ID'] ? "#{$row['Complaint_ID']} - {$row['Complaint_Type']}" : 'N/A') . "</td>
+                    <td>" . ($row['Customer_ID'] ? "{$row['Customer_Name']} (ID: {$row['Customer_ID']})" : 'N/A') . "</td>
+                    <td>{$row['Item_Type']}</td>
+                    <td>" . ($row['Staff_ID'] ? "{$row['Staff_Name']} (ID: {$row['Staff_ID']})" : 'N/A') . "</td>
+                    <td>{$row['Created_At']}</td>
+                    <td>
+                        <a href='?delete_store={$row['Store_ID']}&tab=store' title='Delete' style='color:red; margin-right:10px;' onclick=\"return confirm('Delete this store item?');\">
+                            <span class='material-icons'>delete</span>
+                        </a>
+                        <a href='?edit_store={$row['Store_ID']}&tab=store' title='Edit' style='color:#1976d2;'>
+                            <span class='material-icons'>edit</span>
+                        </a>
+                    </td>
+                </tr>";
+            }
+        } else {
+            echo "<tr><td colspan='7' style='text-align:center;'>No store items found</td></tr>";
+        }
+        ?>
+    </table>
+</div>
 
 
 
 
+<!-- Store Transactions Tab -->
+<div id="store_transactions" class="tab">
+    <h2>Store Transactions</h2>
+    <?php
+    // === CRUD LOGIC for Store Transactions ===
+    $transaction_msg = '';
+    
+    // Handle transaction submission
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['store_id'], $_POST['transaction_type'], $_POST['quantity'])) {
+        $store_id = intval($_POST['store_id']);
+        $transaction_type = $conn->real_escape_string($_POST['transaction_type']);
+        $quantity = intval($_POST['quantity']);
+        $notes = $conn->real_escape_string($_POST['notes']);
+        
+        // Get current balance
+        $current_balance = 0;
+        $balance_result = $conn->query("
+            SELECT Balance_After_Transaction 
+            FROM Store_Transactions 
+            WHERE Store_ID = $store_id 
+            ORDER BY Transaction_ID DESC 
+            LIMIT 1
+        ");
+        
+        if ($balance_result && $balance_result->num_rows > 0) {
+            $row = $balance_result->fetch_assoc();
+            $current_balance = $row['Balance_After_Transaction'];
+        }
+        
+        // Calculate new balance
+        if ($transaction_type === 'IN') {
+            $new_balance = $current_balance + $quantity;
+        } else {
+            $new_balance = $current_balance - $quantity;
+            if ($new_balance < 0) $new_balance = 0; // Prevent negative balance
+        }
+        
+        // Insert transaction
+        $sql = "INSERT INTO Store_Transactions (Store_ID, Transaction_Type, Quantity, Balance_After_Transaction, Notes) 
+                VALUES ($store_id, '$transaction_type', $quantity, $new_balance, '$notes')";
+        
+        if ($conn->query($sql)) {
+            $transaction_msg = "<div class='msg success'>Transaction recorded successfully.</div>";
+        } else {
+            $transaction_msg = "<div class='msg error'>Error: " . $conn->error . "</div>";
+        }
+    }
+    
+    // Fetch store items for dropdown
+    $store_items = $conn->query("
+        SELECT s.Store_ID, s.Item_Type, 
+               COALESCE((
+                   SELECT Balance_After_Transaction 
+                   FROM Store_Transactions st 
+                   WHERE st.Store_ID = s.Store_ID 
+                   ORDER BY st.Transaction_ID DESC 
+                   LIMIT 1
+               ), 0) as Current_Balance
+        FROM Store s 
+        ORDER BY s.Item_Type
+    ");
+    
+    if ($transaction_msg) echo $transaction_msg;
+    ?>
 
+    <!-- Transaction Form -->
+    <form method="post" style="margin-bottom:2rem; background:#f9fbff; padding:1.5rem; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div style="display:flex; flex-wrap:wrap; gap:1rem; align-items:flex-end;">
+            <div style="flex:1; min-width:200px;">
+                <label for="store_id">Item *</label><br>
+                <select id="store_id" name="store_id" required style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+                    <option value="">--Select Item--</option>
+                    <?php 
+                    if ($store_items->num_rows > 0) {
+                        while($item = $store_items->fetch_assoc()):
+                    ?>
+                        <option value="<?php echo $item['Store_ID']; ?>" data-balance="<?php echo $item['Current_Balance']; ?>">
+                            <?php echo $item['Item_Type']; ?> (Current: <?php echo $item['Current_Balance']; ?>)
+                        </option>
+                    <?php 
+                        endwhile;
+                    }
+                    ?>
+                </select>
+            </div>
 
+            <div style="flex:1; min-width:150px;">
+                <label for="transaction_type">Transaction Type *</label><br>
+                <select id="transaction_type" name="transaction_type" required style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+                    <option value="IN">Add Items (IN)</option>
+                    <option value="OUT">Remove Items (OUT)</option>
+                </select>
+            </div>
 
+            <div style="flex:1; min-width:120px;">
+                <label for="quantity">Quantity *</label><br>
+                <input type="number" id="quantity" name="quantity" min="1" required 
+                       style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+            </div>
 
+            <div style="flex:1; min-width:200px;">
+                <label for="notes">Notes</label><br>
+                <input type="text" id="notes" name="notes" 
+                       style="width:100%;padding:0.5rem; border-radius:5px; border:1px solid #d0d7e6;">
+            </div>
 
+            <div style="min-width:100px;">
+                <button type="submit" style="background:#1976d2;color:#fff;padding:0.7rem 1.5rem;border:none;border-radius:5px;font-size:1rem;cursor:pointer;">
+                    Record Transaction
+                </button>
+            </div>
+        </div>
+    </form>
 
-
+    <!-- Transactions Table -->
+    <h3>Transaction History</h3>
+    <table>
+        <tr>
+            <th>Transaction ID</th>
+            <th>Item Type</th>
+            <th>Type</th>
+            <th>Quantity</th>
+            <th>Balance After</th>
+            <th>Date</th>
+            <th>Notes</th>
+        </tr>
+        <?php
+        $transactions = $conn->query("
+            SELECT st.*, s.Item_Type 
+            FROM Store_Transactions st 
+            JOIN Store s ON st.Store_ID = s.Store_ID 
+            ORDER BY st.Transaction_ID DESC
+            LIMIT 50
+        ");
+        
+        if ($transactions->num_rows > 0) {
+            while($transaction = $transactions->fetch_assoc()):
+        ?>
+            <tr>
+                <td><?php echo $transaction['Transaction_ID']; ?></td>
+                <td><?php echo $transaction['Item_Type']; ?></td>
+                <td>
+                    <span style="color: <?php echo $transaction['Transaction_Type'] === 'IN' ? 'green' : 'red'; ?>;">
+                        <?php echo $transaction['Transaction_Type']; ?>
+                    </span>
+                </td>
+                <td><?php echo $transaction['Quantity']; ?></td>
+                <td><?php echo $transaction['Balance_After_Transaction']; ?></td>
+                <td><?php echo $transaction['Transaction_Date']; ?></td>
+                <td><?php echo $transaction['Notes']; ?></td>
+            </tr>
+        <?php
+            endwhile;
+        } else {
+            echo "<tr><td colspan='7' style='text-align:center;'>No transactions found</td></tr>";
+        }
+        ?>
+    </table>
+</div>
 
 
 
@@ -1970,7 +2322,7 @@ document.getElementById('units_consumed').addEventListener('input', function() {
 </main>
 
 <footer>
-  <p>© 2024 Lilongwe Water Board Management System</p>
+  <p>© 2025 Lilongwe Water Board Management System Call 253 </p>
 </footer>
 <script>
 // Tab navigation logic
