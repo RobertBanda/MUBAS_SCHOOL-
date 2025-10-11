@@ -2,6 +2,12 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
 
+// Only Admin can reset others' passwords
+if (current_role() !== null && current_role() !== 'Admin') {
+    header('Location: index.php');
+    exit;
+}
+
 $msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $role = isset($_POST['role']) ? (string)$_POST['role'] : '';

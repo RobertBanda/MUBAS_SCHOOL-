@@ -91,6 +91,11 @@ require_once __DIR__ . '/includes/balances_list.php';
             // Insert new customer (minimal info)
             $conn->query("INSERT INTO customers (Name) VALUES ('$new_name')");
             $customer_id = $conn->insert_id;
+            // Log audit action for customer creation
+            if (function_exists('log_audit_action')) {
+                $new_values = ['Name' => $new_name];
+                log_audit_action($conn, 'CREATE', 'customers', $customer_id, null, $new_values);
+            }
           } elseif (isset($_POST['customer_id']) && is_numeric($_POST['customer_id'])) {
             $customer_id = intval($_POST['customer_id']);
           }
@@ -102,6 +107,11 @@ require_once __DIR__ . '/includes/balances_list.php';
             } else {
               $sql = "INSERT INTO connections (Customer_ID, Connection_Type) VALUES ($customer_id, '$type')";
               if ($conn->query($sql)) {
+                // Log audit action
+                if (function_exists('log_audit_action')) {
+                    $new_values = ['Customer_ID' => $customer_id, 'Connection_Type' => $type];
+                    log_audit_action($conn, 'CREATE', 'connections', $conn->insert_id, null, $new_values);
+                }
                 echo '<div style="color:green;margin-bottom:1rem;">Connection added successfully.</div>';
               } else {
                 echo '<div style="color:red;margin-bottom:1rem;">Error: ' . $conn->error . '</div>';
@@ -391,6 +401,9 @@ require_once __DIR__ . '/includes/balances_list.php';
 <header>
   <img src="lwb.png" alt="LWB Logo" style="max-width:100px;display:block;margin:0 auto 1rem auto;">
   <h1>LWB Management System</h1>
+  <div style="text-align: center; margin: 0.5rem 0; color: #fff; font-size: 1.1rem; font-weight: 500;">
+    <?php echo welcome_text(); ?>
+  </div>
   <input type="text" id="search" placeholder="Search...">
 </header>
 
@@ -411,6 +424,8 @@ require_once __DIR__ . '/includes/balances_list.php';
     <?php if (is_tab_allowed($role, 'store')): ?><button data-tab="store" onclick="showTab('store')">Store</button><?php endif; ?>
     <?php if (is_tab_allowed($role, 'store_transactions')): ?><button data-tab="store_transactions" onclick="showTab('store_transactions')">Store Transactions</button><?php endif; ?>
     <span style="margin-left:auto"></span>
+    <?php if ($role === 'Admin'): ?><a href="admin_passwords.php" style="color:#1976d2;display:inline-flex;align-items:center;text-decoration:none;margin-right:12px"><span class="material-icons" style="font-size:18px;margin-right:4px">admin_panel_settings</span>Manage Passwords</a><?php endif; ?>
+    <?php if ($role === 'Admin'): ?><a href="admin_audit_log.php" style="color:#1976d2;display:inline-flex;align-items:center;text-decoration:none;margin-right:12px"><span class="material-icons" style="font-size:18px;margin-right:4px">history</span>Audit Log</a><?php endif; ?>
     <a href="change_password.php" style="color:#1976d2;display:inline-flex;align-items:center;text-decoration:none;margin-right:12px"><span class="material-icons" style="font-size:18px;margin-right:4px">lock</span>Change Password</a>
     <a href="logout.php" style="color:#d32f2f;display:inline-flex;align-items:center;text-decoration:none"><span class="material-icons" style="font-size:18px;margin-right:4px">logout</span>Logout</a>
   </div>
@@ -453,6 +468,11 @@ require_once __DIR__ . '/includes/balances_list.php';
         $new_name = $conn->real_escape_string(trim($_POST['new_customer_name']));
         $conn->query("INSERT INTO customers (Name) VALUES ('$new_name')");
         $customer_id = $conn->insert_id;
+        // Log audit action for customer creation
+        if (function_exists('log_audit_action')) {
+            $new_values = ['Name' => $new_name];
+            log_audit_action($conn, 'CREATE', 'customers', $customer_id, null, $new_values);
+        }
       } elseif (isset($_POST['customer_id']) && is_numeric($_POST['customer_id'])) {
         $customer_id = intval($_POST['customer_id']);
       }
@@ -464,6 +484,11 @@ require_once __DIR__ . '/includes/balances_list.php';
         } else {
           $sql = "INSERT INTO connections (Customer_ID, Connection_Type) VALUES ($customer_id, '$type')";
           if ($conn->query($sql)) {
+            // Log audit action
+            if (function_exists('log_audit_action')) {
+                $new_values = ['Customer_ID' => $customer_id, 'Connection_Type' => $type];
+                log_audit_action($conn, 'CREATE', 'connections', $conn->insert_id, null, $new_values);
+            }
             $connection_msg = '<div style="color:green;margin-bottom:1rem;">Connection added successfully.</div>';
           } else {
             $connection_msg = '<div style="color:red;margin-bottom:1rem;">Error: ' . $conn->error . '</div>';
@@ -617,6 +642,11 @@ require_once __DIR__ . '/includes/balances_list.php';
       if ($meter_id && $billing_period && $due_date && $status) {
         $sql = "INSERT INTO bills (Meter_ID, Billing_Period, Units_Consumed, Amount, Due_Date, Status) VALUES ($meter_id, '$billing_period', $units, $amount, '$due_date', '$status')";
         if ($conn->query($sql)) {
+          // Log audit action
+          if (function_exists('log_audit_action')) {
+              $new_values = ['Meter_ID' => $meter_id, 'Billing_Period' => $billing_period, 'Units_Consumed' => $units, 'Amount' => $amount, 'Due_Date' => $due_date, 'Status' => $status];
+              log_audit_action($conn, 'CREATE', 'bills', $conn->insert_id, null, $new_values);
+          }
           echo '<div style=\"color:green;margin-bottom:1rem;\">Bill added successfully.</div>';
         } else {
           echo '<div style=\"color:red;margin-bottom:1rem;\">Error: ' . $conn->error . '</div>';
@@ -835,7 +865,13 @@ document.getElementById('units_consumed').addEventListener('input', function() {
     // Handle meter reading deletion
     if (isset($_GET['delete_meterreading'])) {
       $delete_id = intval($_GET['delete_meterreading']);
+      // Get meter reading data before deletion for audit log
+      $reading_data = $conn->query("SELECT * FROM meterreadings WHERE Reading_ID = $delete_id")->fetch_assoc();
       $conn->query("DELETE FROM meterreadings WHERE Reading_ID = $delete_id");
+      // Log audit action
+      if (function_exists('log_audit_action') && $reading_data) {
+          log_audit_action($conn, 'DELETE', 'meterreadings', $delete_id, $reading_data, null);
+      }
       echo '<div style="color:green;margin-bottom:1rem;">Meter reading deleted.</div>';
     }
     // Handle meter reading update
@@ -845,8 +881,17 @@ document.getElementById('units_consumed').addEventListener('input', function() {
       $reading_date = $conn->real_escape_string(trim($_POST['edit_reading_date']));
       $reading_value = floatval($_POST['edit_reading_value']);
       $recorded_by = intval($_POST['edit_recorded_by']);
+      
+      // Get old values for audit log
+      $old_data = $conn->query("SELECT * FROM meterreadings WHERE Reading_ID = $id")->fetch_assoc();
+      $new_values = ['Meter_ID' => $meter_id, 'Reading_Date' => $reading_date, 'Reading_Value' => $reading_value, 'Recorded_By' => $recorded_by];
+      
       $sql = "UPDATE meterreadings SET Meter_ID=$meter_id, Reading_Date='$reading_date', Reading_Value=$reading_value, Recorded_By=$recorded_by WHERE Reading_ID=$id";
       if ($conn->query($sql)) {
+        // Log audit action
+        if (function_exists('log_audit_action') && $old_data) {
+            log_audit_action($conn, 'UPDATE', 'meterreadings', $id, $old_data, $new_values);
+        }
         echo '<div style="color:green;margin-bottom:1rem;">Meter reading updated.</div>';
       } else {
         echo '<div style="color:red;margin-bottom:1rem;">Error updating: ' . $conn->error . '</div>';
@@ -866,12 +911,22 @@ document.getElementById('units_consumed').addEventListener('input', function() {
         $new_staff_name = $conn->real_escape_string(trim($_POST['new_staff_name']));
         $conn->query("INSERT INTO staff (Name) VALUES ('$new_staff_name')");
         $recorded_by = $conn->insert_id;
+        // Log audit action for staff creation
+        if (function_exists('log_audit_action')) {
+            $new_values = ['Name' => $new_staff_name];
+            log_audit_action($conn, 'CREATE', 'staff', $recorded_by, null, $new_values);
+        }
       } elseif (isset($_POST['recorded_by']) && is_numeric($_POST['recorded_by'])) {
         $recorded_by = intval($_POST['recorded_by']);
       }
       if ($meter_id && $reading_date && $reading_value && $recorded_by) {
         $sql = "INSERT INTO meterreadings (Meter_ID, Reading_Date, Reading_Value, Recorded_By) VALUES ($meter_id, '$reading_date', $reading_value, $recorded_by)";
         if ($conn->query($sql)) {
+          // Log audit action
+          if (function_exists('log_audit_action')) {
+              $new_values = ['Meter_ID' => $meter_id, 'Reading_Date' => $reading_date, 'Reading_Value' => $reading_value, 'Recorded_By' => $recorded_by];
+              log_audit_action($conn, 'CREATE', 'meterreadings', $conn->insert_id, null, $new_values);
+          }
           echo '<div style="color:green;margin-bottom:1rem;">Meter reading added successfully.</div>';
         } else {
           echo '<div style="color:red;margin-bottom:1rem;">Error: ' . $conn->error . '</div>';
@@ -1036,7 +1091,13 @@ document.getElementById('units_consumed').addEventListener('input', function() {
       $payment_message = '';
       if (isset($_GET['delete_payment'])) {
         $delete_id = intval($_GET['delete_payment']);
+        // Get payment data before deletion for audit log
+        $payment_data = $conn->query("SELECT * FROM payments WHERE Payment_ID = $delete_id")->fetch_assoc();
         $conn->query("DELETE FROM payments WHERE Payment_ID = $delete_id");
+        // Log audit action
+        if (function_exists('log_audit_action') && $payment_data) {
+            log_audit_action($conn, 'DELETE', 'payments', $delete_id, $payment_data, null);
+        }
         $payment_message = '<div style="color:green;margin-bottom:1rem;">Payment deleted.</div>';
       }
       if (isset($_POST['update_payment_id'])) {
@@ -1045,8 +1106,17 @@ document.getElementById('units_consumed').addEventListener('input', function() {
         $payment_date = $conn->real_escape_string(trim($_POST['edit_payment_date']));
         $amount_paid = floatval($_POST['edit_amount_paid']);
         $method = $conn->real_escape_string(trim($_POST['edit_method']));
+        
+        // Get old values for audit log
+        $old_data = $conn->query("SELECT * FROM payments WHERE Payment_ID = $id")->fetch_assoc();
+        $new_values = ['Bill_ID' => $bill_id, 'Payment_Date' => $payment_date, 'Amount_Paid' => $amount_paid, 'Method' => $method];
+        
         $sql = "UPDATE payments SET Bill_ID=$bill_id, Payment_Date='$payment_date', Amount_Paid=$amount_paid, Method='$method' WHERE Payment_ID=$id";
         if ($conn->query($sql)) {
+          // Log audit action
+          if (function_exists('log_audit_action') && $old_data) {
+              log_audit_action($conn, 'UPDATE', 'payments', $id, $old_data, $new_values);
+          }
           $payment_message = '<div style="color:green;margin-bottom:1rem;">Payment updated.</div>';
         } else {
           $payment_message = '<div style="color:red;margin-bottom:1rem;">Error updating: ' . $conn->error . '</div>';
@@ -1064,6 +1134,11 @@ document.getElementById('units_consumed').addEventListener('input', function() {
         if ($bill_id && $payment_date && $amount_paid && $method) {
           $sql = "INSERT INTO payments (Bill_ID, Payment_Date, Amount_Paid, Method) VALUES ($bill_id, '$payment_date', $amount_paid, '$method')";
           if ($conn->query($sql)) {
+            // Log audit action
+            if (function_exists('log_audit_action')) {
+                $new_values = ['Bill_ID' => $bill_id, 'Payment_Date' => $payment_date, 'Amount_Paid' => $amount_paid, 'Method' => $method];
+                log_audit_action($conn, 'CREATE', 'payments', $conn->insert_id, null, $new_values);
+            }
             $payment_message = '<div style="color:green;margin-bottom:1rem;">Payment added successfully.</div>';
           } else {
             $payment_message = '<div style="color:red;margin-bottom:1rem;">Error: ' . $conn->error . '</div>';
@@ -1221,6 +1296,11 @@ document.getElementById('units_consumed').addEventListener('input', function() {
         if ($bill_id && $payment_date && $amount_paid && $method) {
           $sql = "INSERT INTO payments (Bill_ID, Payment_Date, Amount_Paid, Method) VALUES ($bill_id, '$payment_date', $amount_paid, '$method')";
           if ($conn->query($sql)) {
+            // Log audit action
+            if (function_exists('log_audit_action')) {
+                $new_values = ['Bill_ID' => $bill_id, 'Payment_Date' => $payment_date, 'Amount_Paid' => $amount_paid, 'Method' => $method];
+                log_audit_action($conn, 'CREATE', 'payments', $conn->insert_id, null, $new_values);
+            }
             echo '<div style="color:green;margin-bottom:1rem;">Payment added successfully.</div>';
           } else {
             echo '<div style="color:red;margin-bottom:1rem;">Error: ' . $conn->error . '</div>';
@@ -1326,7 +1406,13 @@ document.getElementById('units_consumed').addEventListener('input', function() {
   // Handle customer deletion
   if (isset($_GET['delete_customer'])) {
     $delete_id = intval($_GET['delete_customer']);
+    // Get customer data before deletion for audit log
+    $customer_data = $conn->query("SELECT * FROM customers WHERE Customer_ID = $delete_id")->fetch_assoc();
   $conn->query("DELETE FROM customers WHERE Customer_ID = $delete_id");
+    // Log audit action
+    if (function_exists('log_audit_action') && $customer_data) {
+        log_audit_action($conn, 'DELETE', 'customers', $delete_id, $customer_data, null);
+    }
     echo '<div style="color:green;margin-bottom:1rem;">Customer deleted.</div>';
   }
   // Handle customer update (including optional connection type update)
@@ -1337,8 +1423,17 @@ document.getElementById('units_consumed').addEventListener('input', function() {
     $phone = $conn->real_escape_string(trim($_POST['edit_phone']));
     $email = $conn->real_escape_string(trim($_POST['edit_email']));
     $category = $conn->real_escape_string(trim($_POST['edit_category']));
+    
+    // Get old values for audit log
+    $old_data = $conn->query("SELECT * FROM customers WHERE Customer_ID = $id")->fetch_assoc();
+    $new_values = ['Name' => $name, 'Address' => $address, 'Phone' => $phone, 'Email' => $email, 'Category' => $category];
+    
     $sql = "UPDATE customers SET Name='$name', Address='$address', Phone='$phone', Email='$email', Category='$category' WHERE Customer_ID=$id";
     if ($conn->query($sql)) {
+      // Log audit action
+      if (function_exists('log_audit_action') && $old_data) {
+          log_audit_action($conn, 'UPDATE', 'customers', $id, $old_data, $new_values);
+      }
       // Optionally update connection type if provided
       if (isset($_POST['edit_connection_type'])) {
         $newType = $conn->real_escape_string(trim($_POST['edit_connection_type']));
@@ -1582,7 +1677,13 @@ document.getElementById('units_consumed').addEventListener('input', function() {
     // Handle staff deletion
     if (isset($_GET['delete_staff'])) {
       $delete_id = intval($_GET['delete_staff']);
+      // Get staff data before deletion for audit log
+      $staff_data = $conn->query("SELECT * FROM staff WHERE Staff_ID = $delete_id")->fetch_assoc();
       $conn->query("DELETE FROM staff WHERE Staff_ID = $delete_id");
+      // Log audit action
+      if (function_exists('log_audit_action') && $staff_data) {
+          log_audit_action($conn, 'DELETE', 'staff', $delete_id, $staff_data, null);
+      }
       echo '<div style="color:green;margin-bottom:1rem;">Staff deleted.</div>';
     }
     // Handle staff update
@@ -1591,8 +1692,17 @@ document.getElementById('units_consumed').addEventListener('input', function() {
       $name = $conn->real_escape_string(trim($_POST['edit_staff_name']));
       $department = $conn->real_escape_string(trim($_POST['edit_staff_department']));
       $position = $conn->real_escape_string(trim($_POST['edit_staff_position']));
+      
+      // Get old values for audit log
+      $old_data = $conn->query("SELECT * FROM staff WHERE Staff_ID = $id")->fetch_assoc();
+      $new_values = ['Name' => $name, 'Department' => $department, 'Position' => $position];
+      
       $sql = "UPDATE staff SET Name='$name', Department='$department', Position='$position' WHERE Staff_ID=$id";
       if ($conn->query($sql)) {
+        // Log audit action
+        if (function_exists('log_audit_action') && $old_data) {
+            log_audit_action($conn, 'UPDATE', 'staff', $id, $old_data, $new_values);
+        }
         echo '<div style="color:green;margin-bottom:1rem;">Staff updated.</div>';
       } else {
         echo '<div style="color:red;margin-bottom:1rem;">Error updating: ' . $conn->error . '</div>';
@@ -1610,6 +1720,11 @@ document.getElementById('units_consumed').addEventListener('input', function() {
       if ($name && $department && $position) {
         $sql = "INSERT INTO staff (Name, Department, Position) VALUES ('$name', '$department', '$position')";
         if ($conn->query($sql)) {
+          // Log audit action
+          if (function_exists('log_audit_action')) {
+              $new_values = ['Name' => $name, 'Department' => $department, 'Position' => $position];
+              log_audit_action($conn, 'CREATE', 'staff', $conn->insert_id, null, $new_values);
+          }
           echo '<div style="color:green;margin-bottom:1rem;">Staff added successfully.</div>';
         } else {
           echo '<div style="color:red;margin-bottom:1rem;">Error: ' . $conn->error . '</div>';

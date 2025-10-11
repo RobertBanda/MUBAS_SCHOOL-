@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
   <div class="wrap">
-    <h2><span class="material-icons" style="vertical-align:middle;font-size:24px;color:#1976d2">lock</span> Change Password (<?php echo htmlspecialchars($_SESSION['role']); ?>)</h2>
+    <h2><span class="material-icons" style="vertical-align:middle;font-size:24px;color:#1976d2">lock</span> Change Password - <?php echo welcome_text(); ?></h2>
     <?php if ($msg): ?><div style="margin:.5rem 0;color:#1976d2"><?php echo htmlspecialchars($msg); ?></div><?php endif; ?>
     <form method="post">
       <label for="current" class="with-icon"><span class="material-icons">key</span>Current password</label>

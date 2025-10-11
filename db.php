@@ -1,7 +1,7 @@
 <?php
 $host = 'localhost';
 $user = 'root';
-$pass = ''; // XAMPP/WAMP default
+$pass = ''; // WAMP default
 $dbname = 'lwb_management';
 
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);

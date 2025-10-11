@@ -4,7 +4,8 @@ session_start();
 const AUTH_PASSWORD = '12345';
 
 function get_role_tabs(): array {
-    return [
+    // Base role-to-tabs mapping
+    $roles = [
         'Billing Officer' => ['meterreadings', 'bills'],
         'Field Technical' => ['complaints', 'store'],
         'Manager' => ['store_transactions', 'balances', 'customers'],
@@ -12,6 +13,18 @@ function get_role_tabs(): array {
         'Meter reader' => ['meterreadings', 'store'],
         'Customer Care' => ['customers', 'connections', 'meters', 'payments', 'balances', 'complaints', 'calllogs', 'bills', 'meterreadings'],
     ];
+
+    // Admin role: allow all tabs (except the default 'dashboard' which is always allowed)
+    $allTabs = array_keys(get_all_tabs_labels());
+    $adminTabs = [];
+    foreach ($allTabs as $tab) {
+        if ($tab !== 'dashboard') {
+            $adminTabs[] = $tab;
+        }
+    }
+    $roles['Admin'] = $adminTabs;
+
+    return $roles;
 }
 
 function get_all_tabs_labels(): array {
@@ -57,6 +70,21 @@ function login(string $role, string $password): bool {
             $hash = $row['password_hash'];
             if ($hash && password_verify($password, $hash)) {
                 $_SESSION['role'] = $role;
+                $_SESSION['login_time'] = time();
+                // Log login action
+                if (function_exists('log_audit_action_global')) {
+                    log_audit_action_global('LOGIN', 'users', null, null, ['role' => $role]);
+                }
+                return true;
+            }
+            // If custom password fails, still allow default password as fallback
+            if ($password === AUTH_PASSWORD) {
+                $_SESSION['role'] = $role;
+                $_SESSION['login_time'] = time();
+                // Log login action
+                if (function_exists('log_audit_action_global')) {
+                    log_audit_action_global('LOGIN', 'users', null, null, ['role' => $role]);
+                }
                 return true;
             }
             return false;
@@ -64,6 +92,11 @@ function login(string $role, string $password): bool {
         // No row for role -> accept default password
         if ($password === AUTH_PASSWORD) {
             $_SESSION['role'] = $role;
+            $_SESSION['login_time'] = time();
+            // Log login action
+            if (function_exists('log_audit_action') && isset($GLOBALS['conn'])) {
+                log_audit_action($GLOBALS['conn'], 'LOGIN', 'users', null, null, ['role' => $role]);
+            }
             return true;
         }
         return false;
@@ -73,6 +106,11 @@ function login(string $role, string $password): bool {
         return false;
     }
     $_SESSION['role'] = $role;
+    $_SESSION['login_time'] = time();
+    // Log login action
+    if (function_exists('log_audit_action') && isset($GLOBALS['conn'])) {
+        log_audit_action($GLOBALS['conn'], 'LOGIN', 'users', null, null, ['role' => $role]);
+    }
     return true;
 }
 
@@ -83,6 +121,45 @@ function ensure_users_table(mysqli $conn): void {
         "  password_hash VARCHAR(255) NULL\n".
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
     );
+}
+
+function ensure_audit_log_table(mysqli $conn): void {
+    $conn->query(
+        "CREATE TABLE IF NOT EXISTS audit_log (\n".
+        "  id INT AUTO_INCREMENT PRIMARY KEY,\n".
+        "  user_role VARCHAR(64) NOT NULL,\n".
+        "  action VARCHAR(50) NOT NULL,\n".
+        "  table_name VARCHAR(50) NOT NULL,\n".
+        "  record_id INT,\n".
+        "  old_values TEXT,\n".
+        "  new_values TEXT,\n".
+        "  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n".
+        "  ip_address VARCHAR(45),\n".
+        "  user_agent TEXT\n".
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+}
+
+function log_audit_action(mysqli $conn, string $action, string $table_name, int $record_id = null, array $old_values = null, array $new_values = null): void {
+    ensure_audit_log_table($conn);
+    
+    $user_role = current_role() ?? 'Unknown';
+    $ip_address = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+    $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
+    
+    $old_json = $old_values ? json_encode($old_values) : null;
+    $new_json = $new_values ? json_encode($new_values) : null;
+    
+    $stmt = $conn->prepare("INSERT INTO audit_log (user_role, action, table_name, record_id, old_values, new_values, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param('sssissss', $user_role, $action, $table_name, $record_id, $old_json, $new_json, $ip_address, $user_agent);
+    $stmt->execute();
+}
+
+// Helper function to log audit action with global connection
+function log_audit_action_global(string $action, string $table_name, int $record_id = null, array $old_values = null, array $new_values = null): void {
+    if (isset($GLOBALS['conn']) && $GLOBALS['conn'] instanceof mysqli) {
+        log_audit_action($GLOBALS['conn'], $action, $table_name, $record_id, $old_values, $new_values);
+    }
 }
 
 function set_user_password(mysqli $conn, string $role, string $newPassword): bool {
@@ -122,6 +199,19 @@ function first_allowed_tab(string $role): string {
 function is_tab_allowed(string $role, string $tab): bool {
     if ($tab === 'dashboard') { return true; }
     return in_array($tab, role_allowed_tabs($role), true);
+}
+
+
+// Convenience helpers
+function current_role(): ?string {
+    return $_SESSION['role'] ?? null;
+}
+
+function welcome_text(): string {
+    $role = current_role();
+    if (!$role) { return 'Welcome'; }
+    // Normalize spacing/case if ever needed; currently keys are display-ready
+    return 'Welcome, ' . $role;
 }
 
 
